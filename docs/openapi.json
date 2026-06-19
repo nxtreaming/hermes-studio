@@ -9926,6 +9926,48 @@
         }
       }
     },
+    "/api/hermes/tts/settings/active": {
+      "put": {
+        "tags": [
+          "TTS"
+        ],
+        "summary": "Update active",
+        "description": "PUT /api/hermes/tts/settings/active",
+        "operationId": "saveActiveProvider",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/hermes/tts/settings/{provider}": {
       "put": {
         "tags": [
@@ -9967,6 +10009,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "activeProvider": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
                   "secrets": {
                     "type": "object",
                     "additionalProperties": true
