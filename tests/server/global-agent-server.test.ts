@@ -635,6 +635,7 @@ describe('GlobalAgentServer', () => {
       interactionId: 'voice-1',
       segmentId: 'voice-1-tts-1',
       url: expect.stringMatching(/^\/api\/hermes\/mcu\/audio\/[a-f0-9-]+\.pcm$/),
+      completionManagedByServer: true,
     }))
     agentSocket.__handlers.get('audio.done')?.({
       interactionId: 'voice-1',
@@ -654,6 +655,7 @@ describe('GlobalAgentServer', () => {
       interactionId: 'voice-1',
       segmentId: 'voice-1-tts-2',
       url: expect.stringMatching(/^\/api\/hermes\/mcu\/audio\/[a-f0-9-]+\.pcm$/),
+      completionManagedByServer: true,
     }))
   })
 

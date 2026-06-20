@@ -168,6 +168,7 @@ describe('outbound relay client', () => {
       channels: 2,
       sampleRate: 16000,
     })
+    expect(enqueuePayload).not.toHaveProperty('completionManagedByServer')
 
     ws.__handlers.get('message')?.(JSON.stringify({
       type: 'audio.done',
@@ -238,6 +239,7 @@ describe('outbound relay client', () => {
       channels: 1,
       sampleRate: 16000,
     })
+    expect(enqueuePayload).not.toHaveProperty('completionManagedByServer')
   })
 
   it('forwards an allowed HTTP request to the local Web UI server', async () => {

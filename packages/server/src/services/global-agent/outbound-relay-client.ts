@@ -799,6 +799,7 @@ class PlainWebSocketRelayClient {
       channels: 1,
       sampleRate: MCU_TTS_SAMPLE_RATE,
       durationMs: Math.max(1200, Math.min(text.length * 180, 12_000)),
+      completionManagedByServer: true,
     })
     await waitForDone
   }

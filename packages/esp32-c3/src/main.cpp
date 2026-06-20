@@ -158,6 +158,7 @@ struct McuAudioSegment {
   String mimeType;
   uint8_t channels = 2;
   uint32_t durationMs = 0;
+  bool completionManagedByServer = false;
 };
 
 McuAudioSegment mcuAudioQueue[kMaxMcuAudioQueue];
@@ -511,7 +512,7 @@ void drawOledFrame() {
     status += F(" ");
     status += oledHint;
   }
-  oledDrawCenteredText(57, fitOledText(status, 21), 1);
+  oledDrawScrollingText(57, status, 1);
 }
 
 void refreshOled(bool force = false) {
@@ -2715,6 +2716,26 @@ void markMcuInteraction(const String &interactionId, const String &status, const
   oledDirty = true;
 }
 
+bool shouldPreserveMcuToolStatus(const String &interactionId) {
+  return mcuInteractionStatus == F("tool") && mcuToolName.length() > 0 &&
+         (interactionId.length() == 0 || mcuInteractionId.length() == 0 || interactionId == mcuInteractionId);
+}
+
+void touchMcuInteraction(const String &interactionId) {
+  if (interactionId.length() > 0) mcuInteractionId = interactionId;
+  mcuInteractionActive = true;
+  mcuInteractionUpdatedAtMs = millis();
+  oledDirty = true;
+}
+
+void markMcuAudioSpeaking(const String &interactionId) {
+  if (shouldPreserveMcuToolStatus(interactionId)) {
+    touchMcuInteraction(interactionId);
+    return;
+  }
+  markMcuInteraction(interactionId, F("speaking"), F(""));
+}
+
 void finishMcuAudio(bool interrupted) {
   if (!mcuAudioPlaying) return;
   String json;
@@ -2745,7 +2766,7 @@ void startNextMcuAudio() {
   mcuAudioPlaying = true;
   mcuAudioStartedAtMs = millis();
   mcuAudioDurationMs = mcuAudioDurationFor(mcuCurrentAudio);
-  markMcuInteraction(mcuCurrentAudio.interactionId, F("speaking"), F(""));
+  markMcuAudioSpeaking(mcuCurrentAudio.interactionId);
 
   String json;
   json.reserve(260);
@@ -2761,6 +2782,7 @@ void startNextMcuAudio() {
   if (mcuCurrentAudio.url.length() > 0) {
     bool played = playPcmUrl(mcuCurrentAudio.url, mcuCurrentAudio.channels);
     String interruptedInteractionId = mcuCurrentAudio.interactionId;
+    bool completionManagedByServer = mcuCurrentAudio.completionManagedByServer;
     finishMcuAudio(!played);
     if (mcuVoiceAfterAudioInterrupt) {
       mcuVoiceAfterAudioInterrupt = false;
@@ -2779,7 +2801,7 @@ void startNextMcuAudio() {
     }
     if (played) {
       startNextMcuAudio();
-      if (!mcuAudioPlaying && mcuAudioCount == 0) {
+      if (!completionManagedByServer && !mcuAudioPlaying && mcuAudioCount == 0) {
         markMcuInteraction(interruptedInteractionId, F("completed"), F(""));
         broadcastMcuStatus();
       }
@@ -2792,7 +2814,7 @@ bool enqueueMcuAudio(const McuAudioSegment &segment) {
   int tail = (mcuAudioHead + mcuAudioCount) % kMaxMcuAudioQueue;
   mcuAudioQueue[tail] = segment;
   ++mcuAudioCount;
-  markMcuInteraction(segment.interactionId, F("speaking"), F(""));
+  markMcuAudioSpeaking(segment.interactionId);
   startNextMcuAudio();
   return true;
 }
@@ -2802,12 +2824,16 @@ void handleMcuInteractionStatus(uint8_t clientId, const String &message) {
   String status = jsonStringValue(message, F("status"));
   String text = jsonStringValue(message, F("text"));
   if (status.length() == 0) status = F("thinking");
-  if (status != F("tool")) {
-    mcuToolName = "";
-    mcuToolPreview = "";
-    mcuToolStatus = "";
+  if (status == F("speaking") && shouldPreserveMcuToolStatus(interactionId)) {
+    touchMcuInteraction(interactionId);
+  } else {
+    if (status != F("tool")) {
+      mcuToolName = "";
+      mcuToolPreview = "";
+      mcuToolStatus = "";
+    }
+    markMcuInteraction(interactionId, status, text);
   }
-  markMcuInteraction(interactionId, status, text);
   sendWsJson(clientId, String(F("{\"type\":\"interaction.status.ack\",\"ok\":true,\"status\":\"")) +
                          escapeJson(status) + F("\"}"));
   broadcastMcuStatus();
@@ -2916,6 +2942,7 @@ void handleMcuAudioEnqueue(uint8_t clientId, const String &message) {
   int channels = jsonIntValue(message, F("channels"));
   segment.channels = channels == 1 ? 1 : 2;
   segment.durationMs = static_cast<uint32_t>(jsonIntValue(message, F("durationMs")));
+  segment.completionManagedByServer = jsonBoolValue(message, F("completionManagedByServer"));
 
   bool queued = enqueueMcuAudio(segment);
   String json;
@@ -4064,9 +4091,10 @@ void handleHealth() {
 void tickMcuInteraction() {
   if (mcuAudioPlaying && mcuAudioDurationMs > 0 &&
       millis() - mcuAudioStartedAtMs >= mcuAudioDurationMs) {
+    bool completionManagedByServer = mcuCurrentAudio.completionManagedByServer;
     finishMcuAudio(false);
     startNextMcuAudio();
-    if (!mcuAudioPlaying && mcuAudioCount == 0 &&
+    if (!completionManagedByServer && !mcuAudioPlaying && mcuAudioCount == 0 &&
         (mcuInteractionStatus == F("speaking") || mcuInteractionStatus == F("completed"))) {
       markMcuInteraction(mcuInteractionId, F("completed"), F(""));
       broadcastMcuStatus();
